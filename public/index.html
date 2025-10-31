@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>IP – Your IP Address</title>
+  <style>
+    body {
+      font-family: system-ui, -apple-system, sans-serif;
+      text-align: center;
+      padding: 2rem;
+      background: linear-gradient(135deg, #e0f7fa, #b2ebf2);
+      color: #1a1a1a;
+      margin: 0;
+    }
+    .card {
+      background: white;
+      max-width: 500px;
+      margin: 2rem auto;
+      padding: 2rem;
+      border-radius: 16px;
+      box-shadow: 0 8px 24px rgba(0,0,0,.12);
+    }
+    h1 { margin-top: 0; color: #00695c; }
+    #public, #local {
+      font-size: 1.7rem;
+      margin: 1.2rem 0;
+      font-weight: bold;
+      color: #00695c;
+    }
+    button {
+      background: #00695c;
+      color: white;
+      border: none;
+      padding: .9rem 1.8rem;
+      font-size: 1rem;
+      border-radius: 8px;
+      cursor: pointer;
+      margin: 0.6rem;
+      transition: background .2s;
+    }
+    button:hover { background: #004d40; }
+    pre {
+      background: #f5f5f5;
+      padding: 1.2rem;
+      margin: 1.5rem 0;
+      text-align: left;
+      border-radius: 8px;
+      font-family: 'Courier New', monospace;
+      display: none;
+      overflow-x: auto;
+      border: 1px solid #ddd;
+    }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h1>IP</h1>
+    <p>Your IP addresses, instantly.</p>
+    <div id="public">Loading public IP...</div>
+    <div id="local">Detecting local IP...</div>
+    <button id="refresh">Refresh</button>
+    <button id="raw">View Raw</button>
+    <pre id="raw-output"></pre>
+  </div>
+
+  <script>
+    // 1. Load Public IP from Netlify Function
+    async function loadPublicIP() {
+      const el = document.getElementById('public');
+      try {
+        const res = await fetch('/api/get-ip');
+        const data = await res.json();
+        el.textContent = `Public IP: ${data.ip}`;
+      } catch (err) {
+        el.textContent = 'Error loading public IP';
+        console.error(err);
+      }
+    }
+
+    // 2. Detect Local IP using WebRTC
+    function detectLocalIP() {
+      const el = document.getElementById('local');
+      el.textContent = 'Detecting local IP...';
+
+      const pc = new RTCPeerConnection({ iceServers: [] });
+      pc.createDataChannel('');
+
+      pc.createOffer()
+        .then(offer => pc.setLocalDescription(offer))
+        .catch(() => {});
+
+      pc.onicecandidate = (e) => {
+        if (!e.candidate) {
+          pc.close();
+          return;
+        }
+        const candidate = e.candidate.candidate;
+        const match = candidate.match(/([0-9]{1,3}\.){3}[0-9]{1,3}/);
+        if (match) {
+          const ip = match[0];
+          if (ip.startsWith('192.168.') || ip.startsWith('10.') || ip.startsWith('172.')) {
+            el.textContent = `Local IP: ${ip}`;
+            pc.close();
+          }
+        }
+      };
+
+      setTimeout(() => {
+        if (el.textContent.includes('Detecting')) {
+          el.textContent = 'Local IP: Not detectable';
+          pc.close();
+        }
+      }, 4000);
+    }
+
+    // 3. Show Raw Data
+    document.getElementById('raw').addEventListener('click', () => {
+      const pub = document.getElementById('public').textContent;
+      const loc = document.getElementById('local').textContent;
+      const raw = document.getElementById('raw-output');
+      raw.textContent = `${pub}\n${loc}`;
+      raw.style.display = raw.style.display === 'block' ? 'none' : 'block';
+    });
+
+    // 4. Refresh Button
+    document.getElementById('refresh').addEventListener('click', () => {
+      loadPublicIP();
+      detectLocalIP();
+    });
+
+    // Initial load
+    loadPublicIP();
+    detectLocalIP();
+  </script>
+</body>
+</html>
